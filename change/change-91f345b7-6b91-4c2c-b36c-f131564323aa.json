@@ -1,0 +1,11 @@
+{
+  "changes": [
+    {
+      "type": "minor",
+      "comment": "Add support to include pipeline configuraiton in pacakge.json files #817",
+      "packageName": "@lage-run/cli",
+      "email": "dannyvv@microsoft.com",
+      "dependentChangeType": "patch"
+    }
+  ]
+}
