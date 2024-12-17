@@ -5,7 +5,7 @@ import type { ConfigOptions } from "@lage-run/config";
 import { getConfig } from "@lage-run/config";
 import { type PackageInfos, getPackageInfos, getWorkspaceRoot } from "workspace-tools";
 import { getFilteredPackages } from "../../filter/getFilteredPackages.js";
-import createLogger from "@lage-run/logger";
+import createLogger, { type Logger } from "@lage-run/logger";
 import path from "path";
 import { parse } from "shell-quote";
 
@@ -18,7 +18,7 @@ import { runnerPickerOptions } from "../../runnerPickerOptions.js";
 import { parseServerOption } from "../parseServerOption.js";
 import { optimizeTargetGraph } from "../../optimizeTargetGraph.js";
 
-interface InfoActionOptions extends ReporterInitOptions {
+export interface InfoActionOptions extends ReporterInitOptions {
   dependencies: boolean;
   dependents: boolean;
   since: string;
@@ -88,7 +88,36 @@ export async function infoAction(options: InfoActionOptions, command: Command) {
 
   const packageInfos = getPackageInfos(root);
 
-  const { tasks, taskArgs } = filterArgsForTasks(command.args);
+  const packageTasks = await getPackageTasks(root, logger, options, config, packageInfos, command.args);
+
+  const scope = getFilteredPackages({
+    root,
+    packageInfos,
+    logger,
+    includeDependencies: options.dependencies,
+    includeDependents: options.dependents && !options.to, // --to is a short hand for --scope + --no-dependents
+    since: options.since,
+    scope: (options.scope ?? []).concat(options.to ?? []), // --to is a short hand for --scope + --no-dependents
+    repoWideChanges: config.repoWideChanges,
+    sinceIgnoreGlobs: options.ignore.concat(config.ignore),
+  });
+
+  logger.info("info", {
+    command: command.args,
+    scope,
+    packageTasks,
+  });
+}
+
+export async function getPackageTasks(
+  root: string,
+  logger: Logger,
+  options: InfoActionOptions,
+  config: ConfigOptions,
+  packageInfos: PackageInfos,
+  commandArgs: string[]
+) {
+  const { tasks, taskArgs } = filterArgsForTasks(commandArgs);
 
   const targetGraph = await createTargetGraph({
     logger,
@@ -105,18 +134,6 @@ export async function infoAction(options: InfoActionOptions, command: Command) {
     packageInfos,
   });
 
-  const scope = getFilteredPackages({
-    root,
-    packageInfos,
-    logger,
-    includeDependencies: options.dependencies,
-    includeDependents: options.dependents && !options.to, // --to is a short hand for --scope + --no-dependents
-    since: options.since,
-    scope: (options.scope ?? []).concat(options.to ?? []), // --to is a short hand for --scope + --no-dependents
-    repoWideChanges: config.repoWideChanges,
-    sinceIgnoreGlobs: options.ignore.concat(config.ignore),
-  });
-
   const pickerOptions = runnerPickerOptions(options.nodeArg, config.npmClient, taskArgs);
 
   const runnerPicker = new TargetRunnerPicker(pickerOptions);
@@ -127,14 +144,10 @@ export async function infoAction(options: InfoActionOptions, command: Command) {
     generatePackageTask(target, taskArgs, config, options, binPaths, packageInfos, tasks)
   );
 
-  logger.info("info", {
-    command: command.args,
-    scope,
-    packageTasks,
-  });
+  return packageTasks;
 }
 
-function generatePackageTask(
+export function generatePackageTask(
   target: Target,
   taskArgs: string[],
   config: ConfigOptions,

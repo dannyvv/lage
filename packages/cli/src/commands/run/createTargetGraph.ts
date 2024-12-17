@@ -6,7 +6,7 @@ import { getFilteredPackages } from "../../filter/getFilteredPackages.js";
 import type { PipelineDefinition } from "@lage-run/config";
 import { hasRepoChanged } from "../../filter/hasRepoChanged.js";
 
-interface CreateTargetGraphOptions {
+export interface CreateTargetGraphOptions {
   logger: Logger;
   root: string;
   dependencies: boolean;
