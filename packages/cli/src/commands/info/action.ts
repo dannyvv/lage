@@ -6,7 +6,8 @@ import { getConfig } from "@lage-run/config";
 import { type PackageInfos, getPackageInfos, getWorkspaceRoot } from "workspace-tools";
 import { getFilteredPackages } from "../../filter/getFilteredPackages.js";
 import createLogger from "@lage-run/logger";
-import path from "path";
+import path from "node:path";
+import fs from "node:fs";
 import { parse } from "shell-quote";
 
 import type { ReporterInitOptions } from "../../types/ReporterInitOptions.js";
@@ -28,6 +29,8 @@ interface InfoActionOptions extends ReporterInitOptions {
   nodeArg: string;
   ignore: string[];
   server: string;
+  outputFile?: string;
+  optimizeGraph: boolean;
 }
 
 interface PackageTask {
@@ -139,7 +142,7 @@ export async function infoAction(options: InfoActionOptions, command: Command) {
   // This is a temp solution to be able to upgrade to Lage V2 without breaking the BuildXL integration. And allow us
   // to update to lage v2.
   // Unfortunately this is the only variable that we can use to not break any other customers
-  const createBackwardsCompatGraph = process.env["DOMINO"] === "1";
+  const createBackwardsCompatGraph = process.env["DOMINO"] === "1" || !options.optimizeGraph;
 
   const optimizedTargets = await optimizeTargetGraph(targetGraph, runnerPicker, createBackwardsCompatGraph);
   const binPaths = getBinPaths();
@@ -147,11 +150,24 @@ export async function infoAction(options: InfoActionOptions, command: Command) {
     generatePackageTask(target, taskArgs, config, options, binPaths, packageInfos, tasks)
   );
 
-  logger.info("info", {
+  const infoResult = {
     command: command.args,
     scope,
     packageTasks,
-  });
+  };
+
+  if (options.outputFile) {
+    const parentFolder = path.dirname(options.outputFile);
+    if (!fs.existsSync(parentFolder)) {
+      await fs.promises.mkdir(parentFolder, { recursive: true });
+    }
+    const infoJson = JSON.stringify(infoResult, null, options.verbose ? 2 : undefined);
+    await fs.promises.writeFile(options.outputFile, infoJson);
+    logger.info(`Wrote info to file: ${options.outputFile}`);
+  } else {
+    logger.info(JSON.stringify(options, null, 2));
+    logger.info("info", infoResult);
+  }
 }
 
 function generatePackageTask(
